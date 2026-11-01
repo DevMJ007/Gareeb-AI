@@ -1,0 +1,12 @@
+# Runtime dependencies for the MJ AI desktop application.
+# Install the Tesseract OCR executable separately for screen text extraction.
+PySide6>=6.5.0
+ollama>=0.1.0
+faster-whisper>=1.0.0
+PyAudio>=0.2.14
+pyttsx3>=2.90
+PyAutoGUI>=0.9.54
+pywinauto>=0.6.8
+Pillow>=9.0.0
+pytesseract>=0.3.10
+psutil>=5.9.0
