@@ -15,6 +15,16 @@ from pathlib import Path
 from dataclasses import dataclass
 import gc
 
+
+def cpu_thread_limit(max_cpu_percent: int = 80) -> int:
+    """Return a conservative worker count from the configured CPU budget."""
+    logical_cpus = max(1, psutil.cpu_count(logical=True) or 1)
+    try:
+        budget = max(1, min(100, int(max_cpu_percent)))
+    except (TypeError, ValueError):
+        budget = 50
+    return max(1, min(logical_cpus, logical_cpus * budget // 100))
+
 @dataclass
 class ResourceStats:
     """System resource statistics."""
@@ -239,8 +249,16 @@ class ResourceMonitor:
         # Check CPU
         config = self.config_manager.get_performance_config() if self.config_manager else None
         if config and current_stats.cpu_usage_percent > config.max_cpu_usage_percent:
-            self.logger.warning(f"CPU usage too high: {current_stats.cpu_usage_percent}%")
-            return False
+            # CPU usage is a transient system-wide sample. A saturated sample
+            # commonly comes from the local model itself, so do not reject a
+            # request here. Ollama and Whisper use cpu_thread_limit() to keep
+            # their worker count within the configured CPU budget.
+            self.logger.info(
+                "CPU load is %.1f%% (configured budget %s%%); inference will "
+                "use a reduced thread count",
+                current_stats.cpu_usage_percent,
+                config.max_cpu_usage_percent,
+            )
         
         # Check disk space (minimum 1GB free)
         if current_stats.disk_free_mb < 1024:

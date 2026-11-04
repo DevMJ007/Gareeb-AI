@@ -2,7 +2,7 @@
 import time
 import pytest
 
-from core.resource_monitor import ResourceMonitor
+from core.resource_monitor import ResourceMonitor, cpu_thread_limit
 
 
 @pytest.fixture
@@ -16,6 +16,13 @@ def rm():
 
 
 class TestStats:
+    def test_cpu_thread_budget_uses_eighty_percent_by_default(self, monkeypatch):
+        monkeypatch.setattr("core.resource_monitor.psutil.cpu_count",
+                            lambda logical=True: 8)
+
+        assert cpu_thread_limit() == 6
+        assert cpu_thread_limit(50) == 4
+
     def test_collect_stats_shape(self, rm):
         stats = rm._collect_stats()
         assert stats.cpu_usage_percent >= 0

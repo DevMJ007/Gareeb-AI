@@ -38,338 +38,13 @@ from PySide6.QtGui import (
 logger = logging.getLogger(__name__)
 
 
+# Import the new Imp mascot widget
+from src.ui.imp_mascot_widget import ImpMascotWidget
+
 # ======================================================================
-# Animated eyes
+# Animated imp mascot (replaced EyesWidget)
 # ======================================================================
-class EyesWidget(QWidget):
-    """Warm, abstract companion face rendered with lightweight Qt vectors."""
-
-    _STATE_STYLE = {
-        "idle": (QPointF(0.0, 0.0), 1.0, QColor(221, 151, 106)),
-        "listening": (QPointF(0.0, -0.03), 0.96, QColor(239, 139, 76)),
-        "thinking": (QPointF(0.13, -0.15), 0.84, QColor(221, 164, 82)),
-        "speaking": (QPointF(0.0, 0.0), 0.95, QColor(226, 139, 112)),
-        "success": (QPointF(0.0, -0.02), 0.9, QColor(139, 169, 128)),
-        "error": (QPointF(0.0, 0.08), 0.84, QColor(205, 117, 91)),
-        "paused": (QPointF(0.0, 0.0), 0.08, QColor(173, 145, 129)),
-    }
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # The face is shared by the desktop orb and the small greeting avatar.
-        self.setMinimumSize(1, 1)
-        self.setMaximumHeight(168)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.state = "idle"
-        self._animations_enabled = True
-        self._opening = 1.0
-        self._target_opening = 1.0
-        self._blink_opening = 1.0
-        self._blink_started: Optional[float] = None
-        self._next_blink = time.monotonic() + random.uniform(2.5, 5.0)
-        self._gaze = QPointF(0.0, 0.0)
-        self._gaze_target = QPointF(0.0, 0.0)
-        self._accent = QColor(203, 151, 125)
-        self._target_accent = QColor(self._accent)
-        self._phase = 0.0
-        self._last_tick = time.monotonic()
-        self._next_glance = self._last_tick + random.uniform(2.0, 4.5)
-        self._breath = 0.0
-        self._float_offset = 0.0
-
-        self._timer = QTimer(self)
-        self._timer.setTimerType(Qt.PreciseTimer)
-        self._timer.setInterval(50)
-        self._timer.timeout.connect(self._tick)
-        self.setAutoFillBackground(False)
-
-    def set_state(self, state: str) -> None:
-        state = state if state in self._STATE_STYLE else "idle"
-        if state == self.state:
-            return
-        self.state = state
-        gaze, opening, accent = self._STATE_STYLE[state]
-        self._gaze_target = QPointF(gaze)
-        self._target_opening = opening
-        self._target_accent = QColor(accent)
-        if state == "paused":
-            self._blink_started = None
-            self._blink_opening = 1.0
-        self._last_tick = time.monotonic()
-        self._next_glance = self._last_tick + random.uniform(1.8, 4.0)
-        if not self._animations_enabled:
-            self._opening = opening
-            self._gaze = QPointF(gaze)
-            self._accent = QColor(accent)
-        elif self.isVisible():
-            self._timer.setInterval(33 if state != "idle" else 50)
-            self._timer.start()
-        self.update()
-
-    def set_animations_enabled(self, enabled: bool) -> None:
-        self._animations_enabled = bool(enabled)
-        if not self._animations_enabled:
-            self._timer.stop()
-            self._opening = self._target_opening
-            self._blink_opening = 1.0
-            self._gaze = QPointF(self._gaze_target)
-            self._accent = QColor(self._target_accent)
-            self._breath = 0.0
-            self.update()
-        elif self.isVisible() and self.state != "paused":
-            self._last_tick = time.monotonic()
-            self._timer.setInterval(33 if self.state != "idle" else 50)
-            self._timer.start()
-
-    def _tick(self) -> None:
-        if not self.isVisible() or not self._animations_enabled:
-            self._timer.stop()
-            return
-
-        now = time.monotonic()
-        dt = min(max(now - self._last_tick, 0.0), 0.12)
-        self._last_tick = now
-        blend = 1.0 - math.exp(-10.0 * dt)
-
-        if self.state != "paused":
-            if self._blink_started is None and now >= self._next_blink:
-                self._blink_started = now
-            if self._blink_started is not None:
-                progress = (now - self._blink_started) / 0.23
-                if progress >= 1.0:
-                    self._blink_opening = 1.0
-                    self._blink_started = None
-                    self._next_blink = now + random.uniform(2.7, 5.4)
-                elif progress < 0.46:
-                    t = progress / 0.46
-                    self._blink_opening = 1.0 - (t * t * (3.0 - 2.0 * t))
-                else:
-                    t = (progress - 0.46) / 0.54
-                    self._blink_opening = t * t * (3.0 - 2.0 * t)
-
-        if self.state == "idle" and now >= self._next_glance:
-            self._gaze_target = QPointF(
-                random.uniform(-0.12, 0.12), random.uniform(-0.10, 0.08))
-            self._next_glance = now + random.uniform(2.0, 5.0)
-
-        self._opening += (self._target_opening - self._opening) * blend
-        self._gaze += (self._gaze_target - self._gaze) * blend
-        self._accent = self._mix_color(self._accent, self._target_accent, blend)
-        self._phase += dt
-        self._breath = math.sin(now * 0.75) * (0.008 if self.state == "idle" else 0.002)
-        self._float_offset = math.sin(now * 0.9) * (2.0 if self.state == "idle" else 0.65)
-        self.update()
-
-        settled = (
-            abs(self._opening - self._target_opening) < 0.01
-            and abs(self._gaze.x() - self._gaze_target.x()) < 0.01
-            and abs(self._gaze.y() - self._gaze_target.y()) < 0.01
-        )
-        if self.state == "paused" and settled:
-            self._timer.stop()
-        elif self.state == "idle":
-            self._timer.setInterval(50)
-
-    @staticmethod
-    def _mix_color(start: QColor, end: QColor, amount: float) -> QColor:
-        return QColor(
-            round(start.red() + (end.red() - start.red()) * amount),
-            round(start.green() + (end.green() - start.green()) * amount),
-            round(start.blue() + (end.blue() - start.blue()) * amount),
-            round(start.alpha() + (end.alpha() - start.alpha()) * amount),
-        )
-
-    def paintEvent(self, event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        scale = min(self.width() / 176.0, self.height() / 160.0)
-        painter.translate(self.width() / 2.0, self.height() / 2.0 + self._float_offset)
-        painter.scale(scale * (1.0 + self._breath), scale * (1.0 - self._breath * 0.35))
-
-        head = QPainterPath()
-        head.addEllipse(QRectF(-68.0, -68.0, 136.0, 136.0))
-
-        # Soft amber light gives the glassy orb a warm edge without a neon halo.
-        halo = QRadialGradient(QPointF(0, 3), 106)
-        halo_color = QColor(self._accent)
-        halo_color.setAlpha(74 if self.state == "listening" else 48)
-        clear_halo = QColor(halo_color)
-        clear_halo.setAlpha(0)
-        halo.setColorAt(0.0, halo_color)
-        halo.setColorAt(1.0, clear_halo)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(halo))
-        painter.drawEllipse(QRectF(-90, -90, 180, 180))
-
-        if self.state == "listening":
-            pulse = 1.0 + math.sin(self._phase * 2.0) * 0.012
-            ring = QColor(self._accent)
-            ring.setAlpha(108)
-            painter.save()
-            painter.scale(pulse, pulse)
-            painter.setPen(QPen(ring, 1.8))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(head)
-            painter.restore()
-
-        # A soft cast shadow separates the orb from transparent desktop pixels.
-        painter.save()
-        painter.translate(0, 5)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(116, 74, 48, 42))
-        painter.drawEllipse(QRectF(-64, -64, 128, 128))
-        painter.restore()
-
-        face_gradient = QRadialGradient(QPointF(-34, -42), 142, QPointF(-39, -48))
-        face_gradient.setColorAt(0.0, QColor(255, 255, 252))
-        face_gradient.setColorAt(0.42, QColor(255, 246, 231))
-        face_gradient.setColorAt(0.72, QColor(255, 222, 190))
-        face_gradient.setColorAt(0.92, QColor(255, 192, 143))
-        face_gradient.setColorAt(1.0, QColor(238, 157, 103))
-        painter.fillPath(head, QBrush(face_gradient))
-
-        # Cool and rose reflections add the iridescent glass edge from the
-        # reference while keeping the sphere as lightweight vector artwork.
-        painter.save()
-        painter.setClipPath(head)
-        for center, radius, color, alpha in (
-            (QPointF(-59, -25), 42, QColor(122, 207, 255), 74),
-            (QPointF(58, -24), 37, QColor(255, 163, 208), 62),
-            (QPointF(0, 67), 52, QColor(255, 207, 111), 72),
-        ):
-            tint = QRadialGradient(center, radius)
-            tint_color = QColor(color)
-            tint_color.setAlpha(alpha)
-            clear_tint = QColor(color)
-            clear_tint.setAlpha(0)
-            tint.setColorAt(0.0, tint_color)
-            tint.setColorAt(1.0, clear_tint)
-            painter.setBrush(QBrush(tint))
-            painter.setPen(Qt.NoPen)
-            painter.drawEllipse(QRectF(center.x() - radius, center.y() - radius,
-                                       radius * 2, radius * 2))
-
-        # Broad specular highlight and catchlights make the orb read as glass.
-        sheen = QRadialGradient(QPointF(-38, -49), 72)
-        sheen.setColorAt(0.0, QColor(255, 255, 255, 216))
-        sheen.setColorAt(0.56, QColor(255, 255, 255, 86))
-        sheen.setColorAt(1.0, QColor(255, 255, 255, 0))
-        painter.setBrush(QBrush(sheen))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(QRectF(-76, -82, 114, 88))
-        painter.setBrush(QColor(255, 255, 255, 206))
-        painter.drawEllipse(QRectF(-55, -61, 31, 12))
-        painter.setBrush(QColor(255, 255, 255, 145))
-        painter.drawEllipse(QRectF(45, -58, 20, 7))
-        painter.restore()
-        painter.strokePath(head, QPen(QColor(255, 255, 255, 204), 2.3))
-        painter.strokePath(head, QPen(QColor(193, 118, 76, 64), 1.0))
-
-        opening = max(0.035, self._opening * self._blink_opening)
-        eye_w, eye_h = 25.5, 31.0
-        eye_y = -5.0
-        for side in (-1, 1):
-            ex = side * 25.0
-            ey = eye_y + self._gaze.y() * 17.0
-            open_h = max(2.6, eye_h * opening)
-            eye = QRectF(ex - eye_w / 2, ey - open_h / 2, eye_w, open_h)
-            if open_h < 5.0:
-                line_pen = QPen(QColor(106, 70, 57, 205), 2.4)
-                line_pen.setCapStyle(Qt.RoundCap)
-                painter.setPen(line_pen)
-                painter.drawLine(QPointF(ex - 15, ey), QPointF(ex + 15, ey))
-                continue
-
-            socket = eye.adjusted(-2.3, -2.3, 2.3, 2.3)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(195, 130, 94, 48))
-            painter.drawEllipse(socket)
-
-            eye_gradient = QLinearGradient(eye.topLeft(), eye.bottomRight())
-            eye_gradient.setColorAt(0.0, QColor(255, 255, 252))
-            eye_gradient.setColorAt(1.0, QColor(249, 235, 221))
-            painter.setBrush(QBrush(eye_gradient))
-            painter.drawEllipse(eye)
-
-            pupil_w, pupil_h = 13.0, min(17.0, max(6.0, open_h * 0.58))
-            px = ex + self._gaze.x() * 7.0
-            py = ey + (1.5 if self.state == "listening" else 0.0)
-            px = max(eye.left() + pupil_w / 2 + 3, min(eye.right() - pupil_w / 2 - 3, px))
-            py = max(eye.top() + pupil_h / 2 + 2, min(eye.bottom() - pupil_h / 2 - 2, py))
-            pupil = QRectF(px - pupil_w / 2, py - pupil_h / 2, pupil_w, pupil_h)
-            pupil_gradient = QLinearGradient(pupil.topLeft(), pupil.bottomRight())
-            pupil_gradient.setColorAt(0.0, QColor(87, 59, 51))
-            pupil_gradient.setColorAt(1.0, QColor(43, 34, 34))
-            painter.setBrush(QBrush(pupil_gradient))
-            painter.drawEllipse(pupil)
-            painter.setBrush(QColor(255, 255, 255, 240))
-            painter.drawEllipse(QPointF(px - 2.0, py - 2.8), 2.0, 2.0)
-            painter.setBrush(QColor(255, 255, 255, 145))
-            painter.drawEllipse(QPointF(px + 2.0, py + 2.7), 0.9, 0.9)
-
-        # Soft brows add a little character to the thinking and error expressions.
-        brow_pen = QPen(QColor(151, 96, 68, 165), 2.0 if self.state != "idle" else 1.5)
-        brow_pen.setCapStyle(Qt.RoundCap)
-        for side in (-1, 1):
-            ex = side * 25.0
-            brow_y = -29.0
-            lift = 2.8 if self.state == "thinking" and side == 1 else 0.0
-            if self.state == "error":
-                lift = -2.2 if side == -1 else 2.2
-            brow = QPainterPath(QPointF(ex - 8.5, brow_y + lift))
-            brow.cubicTo(ex - 4.0, brow_y - 2.4 + lift, ex + 4.0, brow_y - 2.4 - lift,
-                         ex + 8.5, brow_y - lift)
-            painter.setPen(brow_pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(brow)
-
-        mouth_y = 35.0
-        mouth_color = QColor(128, 77, 59, 205)
-        if self.state == "speaking":
-            # Playback events switch this state; the small motion stays deliberately subtle.
-            open_amount = 2.0 + (1.0 + math.sin(self._phase * 7.0)) * 1.6
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(mouth_color)
-            painter.drawEllipse(QRectF(-4.5, mouth_y - open_amount / 2, 9.0, open_amount))
-        else:
-            curve = 5.5
-            if self.state == "success":
-                curve = 8.0
-            elif self.state == "error":
-                curve = -4.0
-            elif self.state == "paused":
-                curve = 0.0
-            mouth = QPainterPath(QPointF(-11, mouth_y))
-            mouth.cubicTo(-5, mouth_y + curve, 5, mouth_y + curve, 11, mouth_y)
-            mouth_pen = QPen(mouth_color, 2.1)
-            mouth_pen.setCapStyle(Qt.RoundCap)
-            painter.setPen(mouth_pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawPath(mouth)
-
-        if self.state == "paused":
-            painter.fillPath(head, QColor(87, 73, 68, 34))
-        painter.end()
-
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        if self._animations_enabled and self.state != "paused":
-            self._last_tick = time.monotonic()
-            self._timer.setInterval(33 if self.state != "idle" else 50)
-            self._timer.start()
-
-    def hideEvent(self, event) -> None:
-        self._timer.stop()
-        super().hideEvent(event)
-
-    def mousePressEvent(self, event) -> None:
-        event.accept()
-
-    def mouseReleaseEvent(self, event) -> None:
-        event.accept()
-
+EyesWidget = ImpMascotWidget
 
 # ======================================================================
 # Companion widget
@@ -377,8 +52,7 @@ class EyesWidget(QWidget):
 class CompanionWidget(QFrame):
     """Glowing desktop orb with a compact, hover-revealed control strip."""
 
-    mic_pressed = Signal()
-    mic_released = Signal()
+    mic_toggled = Signal()
     pause_toggled = Signal()
     settings_requested = Signal()
     hide_requested = Signal()
@@ -394,6 +68,7 @@ class CompanionWidget(QFrame):
 
         self._state = "idle"
         self._work_message = ""
+        self._mic_active = False
         self.name_label = QLabel("MJ", self)
         self.name_label.hide()  # Kept for settings and accessibility.
         self.mic_badge = QLabel("○ MIC OFF", self)
@@ -426,7 +101,7 @@ class CompanionWidget(QFrame):
         bubble_layout.addWidget(self.status_label)
         layout.addWidget(self.bubble, alignment=Qt.AlignHCenter)
 
-        self.eyes = EyesWidget(self)
+        self.eyes = ImpMascotWidget(self)
         self.eyes.setFixedSize(180, 166)
         self.eyes.setCursor(Qt.OpenHandCursor)
         layout.addWidget(self.eyes, alignment=Qt.AlignHCenter)
@@ -449,7 +124,8 @@ class CompanionWidget(QFrame):
         self.pause_button.setStyleSheet(self._button_style(31))
         self.mic_button = QPushButton("🎙", self.controls)
         self.mic_button.setFixedSize(38, 38)
-        self.mic_button.setToolTip("Hold to talk (or press Ctrl+Shift+M)")
+        self.mic_button.setCheckable(True)
+        self.mic_button.setToolTip("Microphone off — click to start listening")
         self.mic_button.setStyleSheet(self._button_style(38, "18px"))
         self.settings_button = QPushButton("⚙", self.controls)
         self.settings_button.setFixedSize(31, 31)
@@ -460,8 +136,7 @@ class CompanionWidget(QFrame):
         self.hide_button.setToolTip("Hide companion (restore from the system tray)")
         self.hide_button.setStyleSheet(self._button_style(31))
 
-        self.mic_button.pressed.connect(self._on_mic_pressed)
-        self.mic_button.released.connect(self._on_mic_released)
+        self.mic_button.clicked.connect(self._on_mic_toggled)
         self.pause_button.clicked.connect(self._on_pause)
         self.settings_button.clicked.connect(self.settings_requested)
         self.hide_button.clicked.connect(self.hide_requested)
@@ -488,14 +163,12 @@ class CompanionWidget(QFrame):
                 font-size:{font_size}; color:#72574f; border:1px solid rgba(174,139,122,90); }}
             QPushButton:hover {{ background:rgba(255,255,250,245); border-color:#bd9a88; }}
             QPushButton:pressed {{ background:rgba(234,211,196,245); }}
+            QPushButton:checked {{ background:#d8432d; color:#fff3dc; border-color:#9e2a22; }}
         """
 
     # ------------------------------------------------------------------
-    def _on_mic_pressed(self) -> None:
-        self.mic_pressed.emit()
-
-    def _on_mic_released(self) -> None:
-        self.mic_released.emit()
+    def _on_mic_toggled(self, checked: bool = False) -> None:
+        self.mic_toggled.emit()
 
     def _on_pause(self) -> None:
         self._paused = not self._paused
@@ -520,22 +193,32 @@ class CompanionWidget(QFrame):
         self.state_changed.emit(state)
         labels = {
             "idle": "I’m here ♥", "listening": "Listening…",
-            "thinking": "One moment…", "speaking": "I’m speaking…",
+            "thinking": "One moment…", "working": "Working on it…",
+            "speaking": "I’m speaking…",
             "success": "All done ✨", "error": "Need a hand?",
             "paused": "Paused",
         }
         self.status_label.setText(self._work_message or labels.get(state, state))
-        if state == "listening":
-            self.mic_badge.setText("● MIC LIVE")
-        else:
-            self.mic_badge.setText("○ MIC OFF")
+        self.mic_badge.setText("● MIC LIVE" if self._mic_active else "○ MIC OFF")
+
+    def set_mic_active(self, active: bool) -> None:
+        self._mic_active = bool(active)
+        self.mic_button.setChecked(self._mic_active)
+        status = "on — click to stop and send" if self._mic_active else "off — click to start listening"
+        self.mic_button.setToolTip(f"Microphone {status} (Ctrl+Shift+M)")
+        self.mic_button.setAccessibleName(
+            "Stop microphone and send recording" if self._mic_active
+            else "Start microphone recording"
+        )
+        self.mic_badge.setText("● MIC LIVE" if self._mic_active else "○ MIC OFF")
 
     def set_work_message(self, message: str) -> None:
         self._work_message = (message or "").strip()
         self.work_badge.setText(message)
         labels = {
             "idle": "I’m here ♥", "listening": "Listening…",
-            "thinking": "One moment…", "speaking": "I’m speaking…",
+            "thinking": "One moment…", "working": "Working on it…",
+            "speaking": "I’m speaking…",
             "success": "All done ✨", "error": "Need a hand?",
             "paused": "Paused",
         }
@@ -555,6 +238,8 @@ class CompanionWidget(QFrame):
 class FloatingCompanionWindow(QWidget):
     """Frameless, transparent desktop shell for the shared companion widget."""
 
+    HOVER_HIDE_DELAY_MS = 1000
+
     def __init__(self, companion: CompanionWidget, config_manager,
                  show_panel_callback, parent=None):
         super().__init__(parent, Qt.Tool | Qt.FramelessWindowHint)
@@ -571,6 +256,10 @@ class FloatingCompanionWindow(QWidget):
         self._press_global: Optional[QPoint] = None
         self._pressed_on_face = False
         self._drag_moved = False
+        self._hover_hide_timer = QTimer(self)
+        self._hover_hide_timer.setSingleShot(True)
+        self._hover_hide_timer.setInterval(self.HOVER_HIDE_DELAY_MS)
+        self._hover_hide_timer.timeout.connect(self._hide_hover_controls)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 4, 5, 4)
@@ -703,14 +392,27 @@ class FloatingCompanionWindow(QWidget):
             self.raise_()
 
     def enterEvent(self, event) -> None:
+        self._hover_hide_timer.stop()
         self.companion.set_controls_visible(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self.companion.set_controls_visible(False)
+        # Give the pointer time to travel from the face down to the mic row.
+        # The controls keep their reserved layout height, so the window and
+        # its hit target remain fixed while they are visible.
+        self._hover_hide_timer.start()
         super().leaveEvent(event)
 
+    def _hide_hover_controls(self) -> None:
+        self.companion.set_controls_visible(False)
+
+    def hideEvent(self, event) -> None:
+        self._hover_hide_timer.stop()
+        self.companion.set_controls_visible(False)
+        super().hideEvent(event)
+
     def closeEvent(self, event) -> None:
+        self._hover_hide_timer.stop()
         self._save_position()
         super().closeEvent(event)
 
@@ -816,8 +518,7 @@ class ConversationPanel(QWidget):
     message_submitted = Signal(str)
     cancel_requested = Signal()
     action_requested = Signal(str)
-    microphone_pressed = Signal()
-    microphone_released = Signal()
+    microphone_toggled = Signal()
     settings_requested = Signal()
     minimize_requested = Signal()
     maximize_requested = Signal()
@@ -892,7 +593,7 @@ class ConversationPanel(QWidget):
         hero.setContentsMargins(0, 2, 0, 2)
         hero.setSpacing(8)
 
-        self.welcome_eyes = EyesWidget()
+        self.welcome_eyes = ImpMascotWidget()
         self.welcome_eyes.setFixedSize(92, 92)
         self.welcome_eyes.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         hero.addWidget(self.welcome_eyes, 0, Qt.AlignLeft | Qt.AlignVCenter)
@@ -966,7 +667,7 @@ class ConversationPanel(QWidget):
         self.task_label.setVisible(False)
         layout.addWidget(self.task_label)
 
-        # Input row with press-and-hold voice input and conditional cancel.
+        # Input row with click-to-toggle voice input and conditional cancel.
         input_row = QHBoxLayout()
         input_row.setSpacing(8)
         self.input_edit = QLineEdit()
@@ -975,10 +676,11 @@ class ConversationPanel(QWidget):
         self.input_edit.returnPressed.connect(self._submit)
         self.mic_button = QPushButton("🎙")
         self.mic_button.setFixedSize(46, 46)
-        self.mic_button.setToolTip("Hold to talk; release to send")
+        self.mic_button.setCheckable(True)
+        self.mic_button.setToolTip("Microphone off — click to start listening")
         self.mic_button.setStyleSheet(self._round_button_style())
-        self.mic_button.pressed.connect(self.microphone_pressed)
-        self.mic_button.released.connect(self.microphone_released)
+        self.mic_button.clicked.connect(
+            lambda _checked=False: self.microphone_toggled.emit())
         self.send_button = QPushButton("↗")
         self.send_button.setFixedSize(48, 48)
         self.send_button.setToolTip("Send message")
@@ -1021,6 +723,12 @@ class ConversationPanel(QWidget):
         footer.addWidget(self.resize_grip)
         layout.addLayout(footer)
 
+        # A single owned timer prevents an old task callback from hiding a
+        # newer task's progress panel.
+        self._progress_hide_timer = QTimer(self)
+        self._progress_hide_timer.setSingleShot(True)
+        self._progress_hide_timer.timeout.connect(self._hide_progress)
+
     @staticmethod
     def _window_button(text: str, tooltip: str) -> QPushButton:
         button = QPushButton(text)
@@ -1040,8 +748,19 @@ class ConversationPanel(QWidget):
                 border-radius:23px; font:16pt 'Segoe UI Emoji'; }
             QPushButton:hover { background:#ffe5d2; border-color:#dda17c; }
             QPushButton:pressed { background:#f8ddc9; }
+            QPushButton:checked { background:#d8432d; color:#fff3dc; border-color:#9e2a22; }
             QPushButton:disabled { color:#b9aca2; }
         """
+
+    def set_microphone_active(self, active: bool) -> None:
+        active = bool(active)
+        self.mic_button.setChecked(active)
+        status = "on — click to stop and send" if active else "off — click to start listening"
+        self.mic_button.setToolTip(f"Microphone {status} (Ctrl+Shift+M)")
+        self.mic_button.setAccessibleName(
+            "Stop microphone and send recording" if active
+            else "Start microphone recording"
+        )
 
     def _submit(self) -> None:
         text = self.input_edit.text().strip()
@@ -1091,6 +810,7 @@ class ConversationPanel(QWidget):
 
     # ------------------------------------------------------------------
     def show_task_progress(self, task: Dict[str, Any]) -> None:
+        self._progress_hide_timer.stop()
         pct = int(float(task.get("progress", 0)) * 100)
         self.progress_bar.setVisible(True)
         self.task_label.setVisible(True)
@@ -1110,7 +830,7 @@ class ConversationPanel(QWidget):
         self.progress_bar.setValue(int(float(task.get("progress", 0)) * 100))
         self.task_label.setText(task.get("summary", task.get("status", "")))
         self.cancel_button.setEnabled(False)
-        QTimer.singleShot(4000, self._hide_progress)
+        self._progress_hide_timer.start(4000)
 
     def _hide_progress(self) -> None:
         if not self.cancel_button.isEnabled():
@@ -1165,9 +885,11 @@ class SettingsDialog(QDialog):
 
         voice = QGroupBox("Voice input")
         v = QGridLayout(voice)
-        self.ptt_enabled = QCheckBox("Enable push-to-talk (hold mic button or shortcut)")
-        self.ptt_key = QLineEdit()
-        self.ptt_key.setPlaceholderText("e.g. Ctrl+Shift+M")
+        voice_help = QLabel(
+            "Click the microphone to start or stop recording. "
+            "Ctrl+Shift+M toggles it from the keyboard."
+        )
+        voice_help.setWordWrap(True)
         self.auto_listen = QCheckBox("Start listening automatically on launch")
         self.wake_word = QCheckBox("Wake word (experimental, off by default)")
         self.wake_word_text = QLineEdit()
@@ -1185,15 +907,13 @@ class SettingsDialog(QDialog):
         self.speech_language.addItem("Telugu", "te")
         self.speech_language.addItem("Urdu", "ur")
         self.speech_language.addItem("Auto-detect", "auto")
-        v.addWidget(self.ptt_enabled, 0, 0, 1, 2)
-        v.addWidget(QLabel("Shortcut:"), 1, 0)
-        v.addWidget(self.ptt_key, 1, 1)
-        v.addWidget(self.auto_listen, 2, 0, 1, 2)
-        v.addWidget(self.wake_word, 3, 0, 1, 2)
-        v.addWidget(QLabel("Wake word:"), 4, 0)
-        v.addWidget(self.wake_word_text, 4, 1)
-        v.addWidget(QLabel("Speech language:"), 5, 0)
-        v.addWidget(self.speech_language, 5, 1)
+        v.addWidget(voice_help, 0, 0, 1, 2)
+        v.addWidget(self.auto_listen, 1, 0, 1, 2)
+        v.addWidget(self.wake_word, 2, 0, 1, 2)
+        v.addWidget(QLabel("Wake word:"), 3, 0)
+        v.addWidget(self.wake_word_text, 3, 1)
+        v.addWidget(QLabel("Speech language:"), 4, 0)
+        v.addWidget(self.speech_language, 4, 1)
         grid.addWidget(voice)
 
         out = QGroupBox("Voice output")
@@ -1402,8 +1122,6 @@ class SettingsDialog(QDialog):
         auto = c.get_automation_config()
         mem = c.get_memory_config()
 
-        self.ptt_enabled.setChecked(a.push_to_talk_enabled)
-        self.ptt_key.setText(a.push_to_talk_key)
         self.auto_listen.setChecked(a.auto_start_listening)
         self.wake_word.setChecked(a.wake_word_enabled)
         self.wake_word_text.setText(a.wake_word)
@@ -1449,8 +1167,6 @@ class SettingsDialog(QDialog):
         c = self.config_manager
         saved_ui = c.get_ui_config()
         c.set_section("audio", {
-            "push_to_talk_enabled": self.ptt_enabled.isChecked(),
-            "push_to_talk_key": self.ptt_key.text() or "ctrl+shift+m",
             "auto_start_listening": self.auto_listen.isChecked(),
             "wake_word_enabled": self.wake_word.isChecked(),
             "wake_word": self.wake_word_text.text() or "hey mj",
@@ -1561,6 +1277,14 @@ class MainWindow(QMainWindow):
         self.memory_store = memory_store
 
         self._streaming_reply = ""
+        self._ai_active = False
+        self._task_active = False
+        self._transcribing = False
+        self._speech_active = False
+        self._transient_face_state: Optional[str] = None
+        self._face_state_timer = QTimer(self)
+        self._face_state_timer.setSingleShot(True)
+        self._face_state_timer.timeout.connect(self._finish_transient_face_state)
 
         self._build_ui()
         self._build_tray()
@@ -1608,16 +1332,14 @@ class MainWindow(QMainWindow):
         self.conversation.message_submitted.connect(self._on_text_submitted)
         self.conversation.cancel_requested.connect(self._on_cancel)
         self.conversation.action_requested.connect(self._on_action_card)
-        self.conversation.microphone_pressed.connect(self._on_mic_pressed)
-        self.conversation.microphone_released.connect(self._on_mic_released)
+        self.conversation.microphone_toggled.connect(self._toggle_microphone)
         self.conversation.settings_requested.connect(self.open_settings)
         self.conversation.minimize_requested.connect(self.showMinimized)
         self.conversation.maximize_requested.connect(self._toggle_maximize)
         self.conversation.close_requested.connect(self.hide)
 
         # Wire companion signals.
-        self.companion.mic_pressed.connect(self._on_mic_pressed)
-        self.companion.mic_released.connect(self._on_mic_released)
+        self.companion.mic_toggled.connect(self._toggle_microphone)
         self.companion.pause_toggled.connect(self._on_pause_toggled)
         self.companion.settings_requested.connect(self._open_settings_from_companion)
         self.companion.state_changed.connect(self.conversation.set_expression)
@@ -1656,7 +1378,7 @@ class MainWindow(QMainWindow):
         try:
             self.mic_shortcut = QShortcut(QKeySequence("Ctrl+Shift+M"), self)
             self.mic_shortcut.setContext(Qt.ApplicationShortcut)
-            # Toggle-style push-to-talk via keyboard.
+            # The shortcut follows the same microphone toggle as the buttons.
             self.mic_shortcut.activated.connect(self._toggle_listening_shortcut)
 
             settings_sc = QShortcut(QKeySequence("Ctrl+,"), self)
@@ -1722,6 +1444,8 @@ class MainWindow(QMainWindow):
             ("ai", "task_result"): self._on_task_result,
             ("ai", "task_error"): self._on_task_error,
             ("planner", "step_update"): self._on_task_progress,
+            ("planner", "task_started"): self._on_task_progress,
+            ("planner", "step_finished"): self._on_task_progress,
             ("planner", "task_finished"): self._on_task_progress,
             # ---- Voice ----
             ("voice", "transcript"): self._on_transcript,
@@ -1731,6 +1455,7 @@ class MainWindow(QMainWindow):
             ("voice", "transcription_finished"): self._on_transcription_finished,
             ("voice", "voice_error"): self._on_voice_error,
             ("voice", "speech_started"): self._on_speech_started,
+            ("voice", "speech_progress"): self._on_speech_progress,
             ("voice", "speech_finished"): self._on_speech_finished,
             # ---- Screen ----
             ("screen", "screen_analysis_started"): self._on_screen_analysis_started,
@@ -1769,33 +1494,44 @@ class MainWindow(QMainWindow):
     # UI-thread event handlers
     # ------------------------------------------------------------------
     def _on_thinking_started(self, data: Dict[str, Any]) -> None:
-        self.companion.set_state("thinking")
+        self._ai_active = True
+        self._set_face_state("thinking")
         self.companion.set_work_message("Thinking…")
         self.conversation.set_activity("MJ is thinking…", active=True)
         self.conversation.set_busy(True)
 
     def _on_thinking_finished(self, data: Dict[str, Any]) -> None:
+        self._ai_active = False
         if data.get("cancelled"):
             self.conversation.append_status("Generation cancelled.")
+            if not self._task_active and not self._transcribing:
+                self._set_face_state("idle")
+                self.conversation.set_busy(False)
         self.companion.set_work_message("")
 
     def _on_ai_reply(self, data: Dict[str, Any]) -> None:
         text = data.get("text", "")
         error = bool(data.get("error"))
+        self._ai_active = False
         if text:
             self.conversation.append_assistant(text, error=error)
             self._speak(text)
         self.conversation.set_activity(
             "Something went wrong" if error else "Ready to help", error=error)
-        self.companion.set_state("error" if error else "idle")
+        if error:
+            self._pulse_error()
+        elif not (self._transient_face_state == "success"
+                  and self.companion.eyes.state == "success"):
+            self._set_face_state("idle")
         self.companion.set_work_message("")
         self.conversation.set_busy(False)
 
     def _on_ai_error(self, data: Dict[str, Any]) -> None:
+        self._ai_active = False
         self.conversation.append_assistant(
             f"Something went wrong: {data.get('error', 'unknown error')}", error=True)
         self.conversation.set_activity("AI needs attention", error=True)
-        self.companion.set_state("error")
+        self._pulse_error()
         self.conversation.set_busy(False)
 
     def _on_model_missing(self, data: Dict[str, Any]) -> None:
@@ -1811,7 +1547,7 @@ class MainWindow(QMainWindow):
         self.conversation.append_status(
             f"The AI model '{model}' is not installed.{installed_hint} {hint}"
         )
-        self.companion.set_state("error")
+        self._pulse_error()
 
     def _on_model_error(self, data: Dict[str, Any]) -> None:
         self.model_status.setText("Model: server error")
@@ -1819,6 +1555,7 @@ class MainWindow(QMainWindow):
         self.conversation.append_status(
             f"AI server problem: {data.get('error', '')} {data.get('hint', '')}"
         )
+        self._pulse_error()
 
     def _on_model_available(self, data: Dict[str, Any]) -> None:
         model = data.get("model", "?")
@@ -1837,21 +1574,28 @@ class MainWindow(QMainWindow):
     def _on_resource_warning(self, data: Dict[str, Any]) -> None:
         self.conversation.append_status(data.get("message", "Low resources."))
         self.conversation.set_activity("Waiting for system resources", error=True)
+        self._pulse_error()
 
     def _on_task_planned(self, data: Dict[str, Any]) -> None:
+        self._task_active = True
         task = data.get("task", {})
         self.conversation.append_task(task.get("description", "Task"))
         self.conversation.show_task_progress(task)
-        self.companion.set_state("thinking")
+        self._set_face_state("working")
+        self.companion.set_work_message("Working…")
         self.conversation.set_activity("Working on your task…", active=True)
         self.conversation.set_busy(True)
 
     def _on_task_progress(self, data: Dict[str, Any]) -> None:
         task = data.get("task", {})
         if task:
+            if task.get("status") == "running":
+                self._task_active = True
+                self._set_face_state("working")
             self.conversation.show_task_progress(task)
 
     def _on_task_result(self, data: Dict[str, Any]) -> None:
+        self._task_active = False
         task = data.get("task", {})
         status = task.get("status", "")
         summary = task.get("summary", "")
@@ -1862,16 +1606,24 @@ class MainWindow(QMainWindow):
             self.conversation.set_activity("Task complete")
             self._pulse_success()
         elif status in ("failed", "cancelled"):
-            self.conversation.set_activity("Task needs attention", error=True)
-            self.companion.set_state("error")
+            self.conversation.set_activity(
+                "Task cancelled" if status == "cancelled" else "Task needs attention",
+                error=status == "failed")
+            self.companion.set_work_message("")
+            if status == "failed":
+                self._pulse_error()
+            else:
+                self._set_face_state("idle")
         else:
             self.conversation.set_activity("Ready to help")
-            self.companion.set_state("idle")
+            self.companion.set_work_message("")
+            self._set_face_state("idle")
 
     def _on_task_error(self, data: Dict[str, Any]) -> None:
+        self._task_active = False
         self.conversation.append_status(f"Task error: {data.get('error', '')}")
         self.conversation.set_activity("Task needs attention", error=True)
-        self.companion.set_state("error")
+        self._pulse_error()
         self.conversation.set_busy(False)
 
     def _on_transcript(self, data: Dict[str, Any]) -> None:
@@ -1883,44 +1635,62 @@ class MainWindow(QMainWindow):
             self.conversation.set_activity("Heard you — preparing that…", active=True)
 
     def _on_listening_started(self, data: Dict[str, Any]) -> None:
-        self.companion.set_state("listening")
-        self.conversation.set_activity("Listening — release to send", active=True)
-        self.conversation.append_status("Listening… (release to send)")
+        self._transcribing = False
+        self._set_microphone_active(True)
+        self._set_face_state("listening")
+        self.conversation.set_activity("Listening — click the mic again to send", active=True)
+        self.conversation.append_status("Listening… (click the mic again to send)")
 
     def _on_listening_stopped(self, data: Dict[str, Any]) -> None:
-        if self.companion.eyes.state == "listening":
-            self.companion.set_state("idle")
+        self._set_microphone_active(False)
+        self._transcribing = True
+        self._set_face_state("working")
         self.companion.set_work_message("Transcribing…")
         self.conversation.set_activity("Transcribing your voice…", active=True)
 
     def _on_transcription_started(self, data: Dict[str, Any]) -> None:
+        self._transcribing = True
+        self._set_face_state("working")
         self.conversation.set_activity("Transcribing your voice…", active=True)
 
     def _on_transcription_finished(self, data: Dict[str, Any]) -> None:
+        self._transcribing = False
         self.companion.set_work_message("")
-        if self.ai_service is None or not self.ai_service.is_busy():
+        if (not self._task_active and not self._speech_active
+                and (self.ai_service is None or not self.ai_service.is_busy())):
+            self._set_face_state("idle")
             self.conversation.set_activity("Ready to help")
 
     def _on_voice_error(self, data: Dict[str, Any]) -> None:
+        self._transcribing = False
         error = data.get("error", "")
         self.conversation.append_status(f"Voice: {error}")
         self.conversation.append_status("You can type your command instead.")
         self.conversation.set_activity("Voice input needs attention", error=True)
-        self.companion.set_state("error")
+        self._pulse_error()
 
     def _on_speech_started(self, data: Dict[str, Any]) -> None:
-        if self.companion.eyes.state == "idle":
-            self.companion.set_state("speaking")
+        self._speech_active = True
+        self._set_face_state("speaking")
         self.conversation.set_activity("MJ is speaking…", active=True)
 
+    def _on_speech_progress(self, data: Dict[str, Any]) -> None:
+        self.companion.eyes.set_speech_level(data.get("level", 0.0))
+
     def _on_speech_finished(self, data: Dict[str, Any]) -> None:
-        if self.companion.eyes.state == "speaking":
-            self.companion.set_state("idle")
+        self._speech_active = False
+        self.companion.eyes.set_speech_level(0.0)
+        if self._task_active:
+            self._set_face_state("working")
+        elif self._ai_active:
+            self._set_face_state("thinking")
+        elif self._transient_face_state not in ("success", "error"):
+            self._set_face_state("idle")
         if self.ai_service is None or not self.ai_service.is_busy():
             self.conversation.set_activity("Ready to help")
 
     def _on_screen_analysis_started(self, data: Dict[str, Any]) -> None:
-        self.companion.set_state("thinking")
+        self._set_face_state("working")
         self.conversation.set_activity("Reading your screen…", active=True)
 
     def _on_screen_analysis(self, data: Dict[str, Any]) -> None:
@@ -1928,7 +1698,7 @@ class MainWindow(QMainWindow):
             text = data.get("text", "")
             self.conversation.append_status(f"Screen text extracted ({len(text)} chars).")
             self.conversation.set_activity("Screen text ready — asking MJ…", active=True)
-            self.companion.set_state("thinking")
+            self._set_face_state("thinking")
             # Feed to AI for explanation with untrusted-source labelling.
             if self.ai_service is not None:
                 self.ai_service.send_message(
@@ -1938,13 +1708,16 @@ class MainWindow(QMainWindow):
             self.conversation.append_status(f"Screen reading: {err}")
             self.conversation.set_activity(
                 "No readable screen text", error=bool(data.get("error")))
-            self.companion.set_state("error" if data.get("error") else "idle")
+            if data.get("error"):
+                self._pulse_error()
+            else:
+                self._set_face_state("idle")
 
     def _on_screen_error(self, data: Dict[str, Any]) -> None:
         self.conversation.append_status(
             f"Screen analysis failed: {data.get('error', '')}", )
         self.conversation.set_activity("Screen reading needs attention", error=True)
-        self.companion.set_state("error")
+        self._pulse_error()
 
     def _on_confirmation(self, data: Dict[str, Any]) -> None:
         """Modal confirmation for sensitive actions (UI thread)."""
@@ -2053,42 +1826,46 @@ class MainWindow(QMainWindow):
             logger.error(f"Screen action failed: {exc}")
             self.post_event("screen", "screen_analysis_error", {"error": str(exc)})
 
-    def _on_mic_pressed(self) -> None:
+    def _set_microphone_active(self, active: bool) -> None:
+        self.companion.set_mic_active(active)
+        self.conversation.set_microphone_active(active)
+
+    def _toggle_microphone(self) -> None:
         if self.audio_service is None:
             self.conversation.append_status("Voice service unavailable.")
-            return
-        started = self.audio_service.begin_listening()
-        if not started:
-            err = self.audio_service.state.last_error
-            if err:
-                self.conversation.append_status(err)
-
-    def _on_mic_released(self) -> None:
-        if self.audio_service is not None and self.audio_service.state.is_listening:
-            self.audio_service.end_listening()
-
-    def _toggle_listening_shortcut(self) -> None:
-        """Ctrl+Shift+M toggles listening (press again to stop)."""
-        if self.audio_service is None:
+            self._set_microphone_active(False)
             return
         if self.audio_service.state.is_listening:
             self.audio_service.end_listening()
-        else:
-            if not self.audio_service.begin_listening():
-                err = self.audio_service.state.last_error
-                if err:
-                    self.conversation.append_status(err)
+        elif not self.audio_service.begin_listening():
+            err = self.audio_service.state.last_error
+            if err:
+                self.conversation.append_status(err)
+        self._set_microphone_active(self.audio_service.state.is_listening)
+
+    def _toggle_listening_shortcut(self) -> None:
+        """Ctrl+Shift+M toggles listening (press again to stop)."""
+        self._toggle_microphone()
 
     def _on_pause_toggled(self) -> None:
         if self.companion.paused:
+            self._face_state_timer.stop()
+            self._transient_face_state = None
             if self.audio_service is not None:
                 self.audio_service.cancel_current_operation()
+            self._set_microphone_active(False)
             if self.ai_service is not None:
                 self.ai_service.cancel_generation()
             self.companion.set_state("paused")
             self.conversation.append_status("Paused.")
         else:
-            self.companion.set_state("idle")
+            resumed_state = (
+                "working" if (self._task_active or self._transcribing)
+                else "thinking" if self._ai_active
+                else "speaking" if self._speech_active
+                else "idle"
+            )
+            self._set_face_state(resumed_state)
             self.conversation.append_status("Resumed.")
 
     def _on_cancel(self) -> None:
@@ -2103,13 +1880,15 @@ class MainWindow(QMainWindow):
         if self.audio_service is not None:
             if self.audio_service.state.is_listening:
                 self.audio_service.end_listening()
+                self._set_microphone_active(False)
                 cancelled = True
             self.audio_service.stop_speaking()
 
         if cancelled:
             self.conversation.append_status("Cancellation requested…")
             self.conversation.set_activity("Cancellation requested")
-            self.companion.set_state("idle")
+            if not self._task_active and not self._ai_active:
+                self._set_face_state("idle")
             self.conversation.set_busy(False)
 
     def open_settings(self) -> None:
@@ -2277,12 +2056,44 @@ class MainWindow(QMainWindow):
             self.audio_service.speak(text)
 
     def _pulse_success(self) -> None:
-        self.companion.set_state("success")
-        QTimer.singleShot(1500, self._finish_success_pulse)
+        self._set_face_state("success", transient_ms=1700)
+
+    def _pulse_error(self) -> None:
+        self._set_face_state("error", transient_ms=2200)
+
+    def _set_face_state(self, state: str, transient_ms: int = 0) -> None:
+        """Serialize companion state changes on the Qt UI thread."""
+        if self.companion.paused and state != "paused":
+            state = "paused"
+            transient_ms = 0
+        if transient_ms > 0 and state in ("success", "error"):
+            self._transient_face_state = state
+            self._face_state_timer.start(transient_ms)
+        else:
+            self._face_state_timer.stop()
+            self._transient_face_state = None
+        self.companion.set_state(state)
+
+    def _finish_transient_face_state(self) -> None:
+        state = self._transient_face_state
+        self._transient_face_state = None
+        if state is None or self.companion.eyes.state != state:
+            return
+        self.companion.set_work_message("")
+        if self.companion.paused:
+            next_state = "paused"
+        elif self._task_active or self._transcribing:
+            next_state = "working"
+        elif self._ai_active:
+            next_state = "thinking"
+        elif self._speech_active:
+            next_state = "speaking"
+        else:
+            next_state = "idle"
+        self.companion.set_state(next_state)
 
     def _finish_success_pulse(self) -> None:
-        if self.companion.eyes.state == "success":
-            self.companion.set_state("idle")
+        self._finish_transient_face_state()
 
     # Compatibility API used by app.py lifecycle hooks.
     def update_ai_status(self, event: str, data: Dict[str, Any]) -> None:

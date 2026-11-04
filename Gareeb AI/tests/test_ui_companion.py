@@ -57,13 +57,14 @@ def test_floating_companion_stays_minimal_and_shows_real_controls(qapp):
     assert companion.controls.geometry() == reserved_row
     assert companion.mic_button.toolTip()
     assert companion.settings_button.toolTip()
-    pressed, released = [], []
-    companion.mic_pressed.connect(lambda: pressed.append(True))
-    companion.mic_released.connect(lambda: released.append(True))
-    QTest.mousePress(companion.mic_button, Qt.LeftButton)
-    QTest.mouseRelease(companion.mic_button, Qt.LeftButton)
-    assert pressed == [True]
-    assert released == [True]
+    assert companion.mic_button.isCheckable()
+    toggles = []
+    companion.mic_toggled.connect(lambda: toggles.append(True))
+    QTest.mouseClick(companion.mic_button, Qt.LeftButton)
+    assert toggles == [True]
+    assert companion.mic_button.isChecked()
+    companion.set_mic_active(False)
+    assert not companion.mic_button.isChecked()
     companion.set_controls_visible(False)
     assert companion.controls_effect.opacity() == 0.0
     assert companion.controls.geometry() == reserved_row
@@ -124,6 +125,12 @@ def test_reference_panel_keeps_actions_chat_and_window_controls(qapp):
     panel.maximize_button.click()
     assert maximized == [True]
 
+    microphone = []
+    panel.microphone_toggled.connect(lambda: microphone.append(True))
+    QTest.mouseClick(panel.mic_button, Qt.LeftButton)
+    assert microphone == [True]
+    assert panel.mic_button.isChecked()
+
 
 def test_voice_settings_save_selected_speech_language(qapp, tmp_path):
     config = ConfigManager(config_file=str(tmp_path / "mjai-config.json"))
@@ -135,4 +142,5 @@ def test_voice_settings_save_selected_speech_language(qapp, tmp_path):
     dialog._save()
 
     assert config.get_audio_config().language == "hi"
+    assert "push_to_talk_enabled" not in config.config["audio"]
     dialog.close()

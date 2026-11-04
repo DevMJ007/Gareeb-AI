@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Imp – AI agent mascot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gochi+Hand&display=swap">
+<style>
+:root{--paper:#f8f8f5;--ink:#121212;--soft:rgba(18,18,18,.18);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#131417;--ink:#f1f0ea;--soft:rgba(241,240,234,.2)}}
+:root[data-theme="dark"]{--paper:#131417;--ink:#f1f0ea;--soft:rgba(241,240,234,.2)}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:"Gochi Hand","Comic Sans MS",cursive;display:grid;grid-template-rows:1fr auto;overflow:hidden}
+.stage{display:grid;place-items:center;min-height:0;padding:12px}
+#art{width:min(92vw,58dvh);height:auto;max-height:100%;overflow:visible;cursor:grab}
+.o{fill:var(--paper);stroke:var(--ink);stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+.l{fill:none;stroke:var(--ink);stroke-width:2;opacity:.55}
+#art{--ink:#1b1114;--paper:#fff3dc}
+.bodyc{fill:#d8432d}.headc{fill:#e24b33}.foot{fill:#9e2a22}.wing{fill:#5a2a5c}.steel{fill:#c3ccd6}.gold{fill:#e5a93a}.belly{fill:#f6c76b}.grip{fill:#6b3a2a}.horn{fill:#f1dfb4}
+#wingL,#wingR{transform-box:view-box}#wingL{transform-origin:225px 410px;animation:flapL var(--fs,2.8s) ease-in-out infinite alternate}#wingR{transform-origin:375px 410px;animation:flapR var(--fs,2.8s) ease-in-out infinite alternate}
+@keyframes flapL{from{transform:rotate(calc(var(--wL,0deg) - var(--fa,3deg)))}to{transform:rotate(calc(var(--wL,0deg) + var(--fa,3deg)))}}
+@keyframes flapR{from{transform:rotate(calc(var(--wR,0deg) + var(--fa,3deg)))}to{transform:rotate(calc(var(--wR,0deg) - var(--fa,3deg)))}}
+body.overlay #art{width:min(96vw,80dvh)}
+#float{animation:float var(--dur,3.4s) ease-in-out infinite}
+#arms-l,#armL,#armR,#head,#belly,#eyes{transform-box:view-box}
+#armL{transform-origin:300px 470px;transform:rotate(var(--aL,0deg));transition:transform .55s cubic-bezier(.3,1.6,.5,1)}
+#armR{transform-origin:300px 470px;transform:rotate(var(--aR,0deg));transition:transform .55s cubic-bezier(.3,1.6,.5,1)}
+#head{transform-origin:300px 330px;transform:rotate(var(--tilt,0deg));transition:transform .6s cubic-bezier(.3,1.5,.5,1)}
+#belly{transform-origin:300px 540px;transition:transform .4s}
+#look{transition:transform .15s ease-out}
+#eyes{transform-origin:300px 228px}
+#eyes.blink{animation:blink .14s}
+.swing #armL{animation:swingL var(--sw,.45s) ease-in-out infinite alternate}
+.swing #armR{animation:swingR var(--sw,.45s) ease-in-out infinite alternate-reverse}
+[data-emo=sad] #belly,[data-emo=angry] #belly{transform:scaleY(-1)}
+[data-emo=angry] #float{animation:shake .14s linear infinite}
+[data-emo=surprised] #float{animation:jump .6s ease-out,float 3s ease-in-out .6s infinite}
+.z{animation:rise 2.4s ease-out infinite;font-size:36px;fill:currentColor}
+.dot{animation:dot .9s ease-in-out infinite}
+.tw{transform-box:fill-box;transform-origin:center;animation:tw 1.1s ease-in-out infinite alternate}
+.tear{animation:tear 1.6s ease-in infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(calc(var(--amp,8px)*-1))}}
+@keyframes shake{25%{transform:translate(3px,-1px)}75%{transform:translate(-3px,1px)}}
+@keyframes jump{0%{transform:translateY(0)}35%{transform:translateY(-46px) scale(1.04)}100%{transform:translateY(0)}}
+@keyframes blink{50%{transform:scaleY(.08)}}
+@keyframes swingL{from{transform:rotate(calc(var(--aL,0deg) - 6deg))}to{transform:rotate(calc(var(--aL,0deg) + 6deg))}}
+@keyframes swingR{from{transform:rotate(calc(var(--aR,0deg) - 6deg))}to{transform:rotate(calc(var(--aR,0deg) + 6deg))}}
+@keyframes rise{0%{opacity:0;transform:translateY(16px)}30%{opacity:1}100%{opacity:0;transform:translateY(-30px)}}
+@keyframes dot{50%{transform:translateY(-9px)}}
+@keyframes tw{from{transform:scale(.5);opacity:.5}to{transform:scale(1.15);opacity:1}}
+@keyframes tear{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(46px);opacity:0}}
+.ui{padding:6px 14px 18px;text-align:center}
+#label{font-size:30px;margin:0 0 10px}
+#bar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:720px;margin:0 auto}
+button{font:inherit;font-size:19px;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:14px 10px 15px 9px;padding:4px 14px;cursor:pointer}
+button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.hint{font-size:17px;opacity:.65;margin:12px auto 0;max-width:560px}
+body.overlay{background:transparent}
+body.overlay .ui{display:none}
+body.overlay #art{-webkit-app-region:drag}
+@media (prefers-reduced-motion:reduce){#float,#armL,#armR,#wingL,#wingR,.z,.dot,.tw,.tear{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="stage">
+<svg id="art" viewBox="0 0 600 720" role="img" aria-label="A round horned imp mascot holding two swords">
+<defs>
+<filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence id="turb" type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="1" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4"/></filter>
+<pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="9" stroke="var(--ink)" stroke-width="1.6"/></pattern>
+</defs>
+<ellipse cx="300" cy="702" rx="170" ry="9" fill="url(#hatch)" opacity=".5"/>
+<g id="float" filter="url(#rough)">
+<!-- wings -->
+<g id="wingL"><path class="o wing" d="M225 410 L45 165 Q18 230 22 300 Q60 310 72 352 Q115 350 135 392 Q190 375 225 410Z"/><path d="M225 410 L45 165 Q18 230 22 300 Q60 310 72 352 Q115 350 135 392 Q190 375 225 410Z" fill="url(#hatch)" opacity=".22" stroke="none"/><path d="M45 165 L22 300 M45 165 L72 352 M45 165 L135 392" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/><path d="M225 410 L45 165" fill="none" stroke="var(--ink)" stroke-width="9" stroke-linecap="round"/><path d="M45 165 Q30 150 26 126" fill="none" stroke="var(--ink)" stroke-width="6" stroke-linecap="round"/></g>
+<g id="wingR"><path class="o wing" d="M375 410 L555 165 Q582 230 578 300 Q540 310 528 352 Q485 350 465 392 Q410 375 375 410Z"/><path d="M375 410 L555 165 Q582 230 578 300 Q540 310 528 352 Q485 350 465 392 Q410 375 375 410Z" fill="url(#hatch)" opacity=".22" stroke="none"/><path d="M555 165 L578 300 M555 165 L528 352 M555 165 L465 392" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/><path d="M375 410 L555 165" fill="none" stroke="var(--ink)" stroke-width="9" stroke-linecap="round"/><path d="M555 165 Q570 150 574 126" fill="none" stroke="var(--ink)" stroke-width="6" stroke-linecap="round"/></g>
+<!-- crossed swords behind the body -->
+<g id="armL"><g transform="rotate(-35 300 470)"><path class="o steel" d="M286 288 L314 288 L314 630 L300 692 L286 630Z"/><path d="M300 296 L300 640" fill="none" stroke="var(--ink)" stroke-width="2" opacity=".45"/><rect class="o gold" x="262" y="274" width="76" height="14" rx="6"/><rect class="o grip" x="292" y="236" width="16" height="40" rx="3"/><path d="M292 247 L308 247 M292 257 L308 257 M292 267 L308 267" stroke="var(--ink)" stroke-width="2" fill="none"/><circle class="o gold" cx="300" cy="226" r="14"/><circle cx="300" cy="226" r="5" fill="#d8432d" stroke="var(--ink)" stroke-width="2"/></g></g>
+<g id="armR"><g transform="rotate(35 300 470)"><path class="o steel" d="M286 288 L314 288 L314 630 L300 692 L286 630Z"/><path d="M300 296 L300 640" fill="none" stroke="var(--ink)" stroke-width="2" opacity=".45"/><rect class="o gold" x="262" y="274" width="76" height="14" rx="6"/><rect class="o grip" x="292" y="236" width="16" height="40" rx="3"/><path d="M292 247 L308 247 M292 257 L308 257 M292 267 L308 267" stroke="var(--ink)" stroke-width="2" fill="none"/><circle class="o gold" cx="300" cy="226" r="14"/><circle cx="300" cy="226" r="5" fill="#d8432d" stroke="var(--ink)" stroke-width="2"/></g></g>
+<!-- feet -->
+<ellipse class="o foot" cx="205" cy="664" rx="62" ry="24" transform="rotate(-10 205 664)"/><ellipse class="l" cx="208" cy="667" rx="56" ry="20" transform="rotate(-6 205 664)"/>
+<ellipse class="o foot" cx="400" cy="664" rx="62" ry="24" transform="rotate(8 400 664)"/><ellipse class="l" cx="397" cy="667" rx="56" ry="20" transform="rotate(4 400 664)"/>
+<!-- body -->
+<ellipse class="o bodyc" cx="300" cy="500" rx="155" ry="150"/><ellipse class="l" cx="303" cy="503" rx="149" ry="145" transform="rotate(5 300 500)"/>
+<path d="M392 400 Q478 520 405 622 Q432 520 392 400Z" fill="url(#hatch)" opacity=".7"/>
+<g id="belly"><path class="o belly" d="M222 498 Q300 478 384 494 Q372 590 302 594 Q232 590 222 498Z"/><path d="M222 498 Q300 478 384 494 Q372 590 302 594 Q232 590 222 498Z" fill="url(#hatch)" opacity=".3" stroke="none"/><path d="M222 498 Q300 478 384 494" fill="none" stroke="var(--ink)" stroke-width="4" stroke-linecap="round"/></g>
+<!-- arms -->
+<g id="shL">
+
+<circle class="o bodyc" cx="150" cy="410" r="42"/><circle class="l" cx="152" cy="412" r="38"/></g>
+<g id="shR">
+
+<circle class="o bodyc" cx="450" cy="410" r="42"/><circle class="l" cx="448" cy="412" r="38"/></g>
+<!-- neck + head -->
+<ellipse class="o bodyc" cx="300" cy="352" rx="38" ry="24"/>
+<g id="head">
+<path class="o horn" d="M232 172 Q178 150 184 90 Q188 55 226 34 Q208 70 214 100 Q220 130 272 158Z"/><path d="M190 135 Q205 143 224 140 M186 112 Q202 120 218 116 M187 90 Q202 96 214 92" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+<path class="o horn" d="M368 172 Q422 150 416 90 Q412 55 374 34 Q392 70 386 100 Q380 130 328 158Z"/><path d="M410 135 Q395 143 376 140 M414 112 Q398 120 382 116 M413 90 Q398 96 386 92" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
+<circle class="o headc" cx="300" cy="235" r="92"/><circle class="l" cx="303" cy="238" r="87"/>
+<g id="brows"></g>
+<g id="look"><g id="eyes"></g></g>
+<g id="mouth"></g>
+</g>
+<g id="fx"></g>
+</g>
+</svg>
+</div>
+<div class="ui">
+<p id="label" aria-live="polite">idle</p>
+<div id="bar" role="group" aria-label="Emotions"></div>
+<div id="bar2" style="margin-top:10px"><button id="ov">Overlay view</button></div>
+<p class="hint">Keys 1–9 switch emotion. Your agent can call mascot.set("working") or post a message with an emotion field. In overlay view, press Esc or double-click the imp to return.</p>
+</div>
+<script>
+(function(){
+var S='fill="none" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"';
+var I='fill="var(--ink)"';
+function blob(rx,ry){return '<ellipse rx="'+rx+'" ry="'+ry+'" '+I+'/><ellipse rx="'+rx*.62+'" ry="'+ry*.72+'" fill="none" stroke="var(--paper)" stroke-width="2.5" opacity=".9"/><ellipse cx="'+(-rx*.3)+'" cy="'+(-ry*.35)+'" rx="'+rx*.22+'" ry="'+ry*.2+'" fill="var(--paper)"/>';}
+var EY={
+open:blob(17,27),wide:blob(23,34),sad:blob(16,25),
+narrow:'<path d="M-21 -10 L21 4 Q2 19 -21 -10Z" '+I+'/>',
+happy:'<path d="M-19 8 Q0 -24 19 8" '+S+'/>',
+closed:'<path d="M-19 -2 Q0 12 19 -2" '+S+'/>'
+};
+function eyes(t){return [262,338].map(function(x,i){return '<g transform="translate('+x+' 228) scale('+(i?-1:1)+' 1)">'+EY[t]+'</g>';}).join('');}
+var MO={
+grin:'<path d="M252 268 Q300 330 348 268 Q300 288 252 268Z" '+I+'/>',
+big:'<path d="M246 264 Q300 276 354 264 Q340 328 300 328 Q260 328 246 264Z" '+I+'/><path d="M276 312 Q300 296 324 312 Q300 326 276 312Z" fill="var(--paper)" opacity=".85"/>',
+smirk:'<path d="M255 276 Q305 318 352 260 Q305 294 255 276Z" '+I+'/><path d="M290 296 L298 314 L308 296Z" fill="var(--paper)" stroke="var(--ink)" stroke-width="2"/>',
+flat:'<path d="M272 288 Q288 280 300 288 T328 286" '+S+'/>',
+line:'<path d="M270 288 L330 288" '+S+'/>',
+frown:'<path d="M264 298 Q300 266 336 298" '+S+'/>',
+zig:'<path d="M256 294 L271 278 L286 294 L300 278 L314 294 L329 278 L344 294" '+S+'/>',
+o:'<ellipse cx="300" cy="292" rx="17" ry="24" '+I+'/>',
+tiny:'<path d="M284 288 Q300 296 316 288" '+S+'/>'
+};
+var BR={
+angry:'<path d="M236 188 L286 210" '+S+'/><path d="M364 188 L314 210" '+S+'/>',
+sad:'<path d="M238 208 L286 188" '+S+'/><path d="M362 208 L314 188" '+S+'/>',
+mischief:'<path d="M238 192 L286 206" '+S+'/><path d="M362 200 Q338 180 314 196" '+S+'/>',
+think:'<path d="M240 196 Q262 180 286 194" '+S+'/><path d="M314 202 L360 202" '+S+'/>',
+up:'<path d="M240 178 Q262 164 286 178" '+S+'/><path d="M314 178 Q338 164 360 178" '+S+'/>',
+focus:'<path d="M240 200 L286 200" '+S+'/><path d="M314 200 L360 200" '+S+'/>'
+};
+function star(x,y,s){return '<path class="tw" d="M'+x+' '+(y-s)+' Q'+x+' '+y+' '+(x+s)+' '+y+' Q'+x+' '+y+' '+x+' '+(y+s)+' Q'+x+' '+y+' '+(x-s)+' '+y+' Q'+x+' '+y+' '+x+' '+(y-s)+'Z" fill="#f6c453" stroke="var(--ink)" stroke-width="2"/>';}
+var FX={
+happy:star(130,150,22)+star(474,120,28)+star(110,290,16)+'<ellipse cx="226" cy="274" rx="19" ry="10" fill="#ffb3c1" opacity=".85"/><ellipse cx="374" cy="274" rx="19" ry="10" fill="#ffb3c1" opacity=".85"/>',
+think:'<circle cx="426" cy="170" r="6" '+I+'/><circle cx="454" cy="136" r="10" class="o"/><ellipse cx="506" cy="78" rx="52" ry="36" class="o"/><text x="506" y="95" text-anchor="middle" font-size="46" font-family="Gochi Hand,cursive" '+I+'>?</text>',
+work:'<ellipse cx="490" cy="110" rx="52" ry="30" class="o"/><circle class="dot" cx="466" cy="110" r="7" '+I+'/><circle class="dot" cx="490" cy="110" r="7" '+I+' style="animation-delay:.15s"/><circle class="dot" cx="514" cy="110" r="7" '+I+' style="animation-delay:.3s"/><path d="M262 154 Q300 146 338 154" fill="none" stroke="var(--soft)" stroke-width="4"/>',
+angry:'<path d="M396 140 Q408 140 408 128 M420 128 Q420 140 432 140 M396 154 Q408 154 408 166 M420 166 Q420 154 432 154" '+S.replace('stroke-width="6"','stroke-width="4"')+'/>',
+sad:'<path class="tear" d="M252 262 Q244 278 252 284 Q260 278 252 262Z" fill="#6cc3ff" stroke="var(--ink)" stroke-width="2"/>',
+surprised:'<path d="M455 150 L484 138 M458 184 L490 186 M145 150 L116 138 M142 184 L110 186" '+S+'/>',
+sleepy:'<text class="z" x="410" y="150" font-family="Gochi Hand,cursive">z</text><text class="z" x="440" y="110" style="animation-delay:.8s;font-size:46px" font-family="Gochi Hand,cursive">Z</text><text class="z" x="480" y="64" style="animation-delay:1.6s;font-size:56px" font-family="Gochi Hand,cursive">Z</text>',
+mischief:star(458,160,16)
+};
+var E={
+idle:{eye:'open',mouth:'grin',aL:0,aR:0,amp:8,dur:3.4,tilt:0},
+happy:{eye:'happy',mouth:'big',fx:'happy',aL:10,aR:-10,swing:1,sw:.35,amp:18,dur:.7,tilt:-4},
+thinking:{eye:'open',mouth:'flat',brow:'think',fx:'think',aL:4,aR:-26,amp:5,dur:3.8,tilt:7,bias:[12,-9]},
+working:{eye:'open',mouth:'line',brow:'focus',fx:'work',aL:0,aR:0,swing:1,sw:.22,amp:3,dur:1.2,tilt:3,bias:[0,5]},
+mischief:{eye:'narrow',mouth:'smirk',brow:'mischief',fx:'mischief',aL:12,aR:-12,swing:1,sw:.9,amp:7,dur:2.2,tilt:-6},
+angry:{eye:'narrow',mouth:'zig',brow:'angry',fx:'angry',aL:16,aR:-16,amp:2,dur:.5,tilt:0},
+sad:{eye:'sad',mouth:'frown',brow:'sad',fx:'sad',aL:-20,aR:20,amp:3,dur:5,tilt:-6,bias:[0,6]},
+surprised:{eye:'wide',mouth:'o',brow:'up',fx:'surprised',aL:22,aR:-22,amp:5,dur:3,tilt:0},
+sleepy:{eye:'closed',mouth:'tiny',fx:'sleepy',aL:-26,aR:26,amp:5,dur:6.5,tilt:10}
+};
+var W={idle:[-3,3.5,2.8],happy:[-6,10,.45],thinking:[2,3,3.5],working:[0,2,.5],mischief:[-4,6,.8],angry:[-12,3,.3],sad:[14,2,4],surprised:[-14,8,.25],sleepy:[16,1.5,5]};var names=Object.keys(E),art=document.getElementById('art'),bar=document.getElementById('bar'),cur='idle',bias=[0,0],mx=0,my=0;
+names.forEach(function(n,i){var b=document.createElement('button');b.textContent=(i+1)+' '+n;b.dataset.e=n;b.setAttribute('aria-pressed','false');b.onclick=function(){set(n);};bar.appendChild(b);});
+function $(id){return document.getElementById(id);}
+function look(){$('look').style.transform='translate('+(mx+bias[0])+'px,'+(my+bias[1])+'px)';}
+function set(n){
+if(!E[n])return;var e=E[n];cur=n;art.dataset.emo=n;art.classList.toggle('swing',!!e.swing);
+var s=art.style;var w=W[n]||[0,3,2.8];s.setProperty('--aL',(-e.aL*.5)+'deg');s.setProperty('--aR',(-e.aR*.5)+'deg');s.setProperty('--wL',w[0]+'deg');s.setProperty('--wR',(-w[0])+'deg');s.setProperty('--fa',w[1]+'deg');s.setProperty('--fs',w[2]+'s');s.setProperty('--amp',e.amp+'px');s.setProperty('--dur',e.dur+'s');s.setProperty('--tilt',e.tilt+'deg');s.setProperty('--sw',(e.sw||.45)+'s');
+$('eyes').innerHTML=eyes(e.eye);$('mouth').innerHTML=MO[e.mouth];$('brows').innerHTML=e.brow?BR[e.brow]:'';$('fx').innerHTML=e.fx?FX[e.fx]:'';
+bias=e.bias||[0,0];look();$('label').textContent=n;
+Array.prototype.forEach.call(bar.children,function(b){b.setAttribute('aria-pressed',String(b.dataset.e===n));});
+try{if(location.hash.slice(1)!==n)history.replaceState(null,'','#'+n);}catch(x){}
+}
+window.mascot={set:set,emotions:names};
+addEventListener('message',function(ev){var d=ev.data;if(d&&d.emotion)set(d.emotion);});
+addEventListener('hashchange',function(){set(location.hash.slice(1));});
+addEventListener('keydown',function(ev){var i=parseInt(ev.key,10);if(i>=1&&i<=names.length)set(names[i-1]);if(ev.key==='Escape')document.body.classList.remove('overlay');});
+addEventListener('pointermove',function(ev){var r=art.getBoundingClientRect();var dx=(ev.clientX-(r.left+r.width/2))/r.width,dy=(ev.clientY-(r.top+r.height*.33))/r.height;mx=Math.max(-9,Math.min(9,dx*30));my=Math.max(-7,Math.min(7,dy*24));look();});
+$('ov').onclick=function(){document.body.classList.add('overlay');};
+art.addEventListener('dblclick',function(){document.body.classList.remove('overlay');});
+var still=matchMedia('(prefers-reduced-motion:reduce)').matches;
+if(!still){
+var seed=1;setInterval(function(){seed=seed%6+1;$('turb').setAttribute('seed',seed);},170);
+(function blink(){setTimeout(function(){var el=$('eyes');if(['open','wide','sad'].indexOf(E[cur].eye)>-1){el.classList.add('blink');setTimeout(function(){el.classList.remove('blink');},150);}blink();},2400+Math.random()*3000);})();
+}
+set(E[location.hash.slice(1)]?location.hash.slice(1):'idle');
+})();
+</script>
+</body>
+</html>

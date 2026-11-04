@@ -16,10 +16,11 @@ class TestConfigBasics:
         # First run writes defaults.
         assert cfg.config_file.exists()
         audio = cfg.get_audio_config()
-        assert audio.push_to_talk_enabled is True
+        assert audio.mic_toggle_on is False
         assert audio.language == "en"
         assert audio.microphone_allowed is False  # privacy-first default
         assert audio.screen_capture_allowed is False
+        assert cfg.get_performance_config().max_cpu_usage_percent == 80
 
     def test_ai_defaults(self, cfg):
         ai = cfg.get_ai_config()
@@ -72,9 +73,37 @@ class TestConfigGetSet:
         path.write_text("{not valid json!!!", encoding="utf-8")
         c = ConfigManager(config_file=str(path))
         # Falls back to defaults and rewrites a valid file.
-        assert c.get_audio_config().push_to_talk_enabled is True
+        assert c.get_audio_config().mic_toggle_on is False
         data = json.loads(path.read_text(encoding="utf-8"))
         assert "audio" in data
+
+    def test_legacy_voice_and_cpu_defaults_are_migrated(self, tmp_path):
+        path = tmp_path / "legacy.json"
+        path.write_text(json.dumps({
+            "audio": {
+                "push_to_talk_enabled": True,
+                "push_to_talk_key": "ctrl+shift+m",
+                "language": "hi",
+            },
+            "performance": {"max_cpu_usage_percent": 50},
+        }), encoding="utf-8")
+
+        c = ConfigManager(config_file=str(path))
+
+        assert c.get_audio_config().language == "hi"
+        assert "push_to_talk_enabled" not in c.config["audio"]
+        assert "push_to_talk_key" not in c.config["audio"]
+        assert c.get_performance_config().max_cpu_usage_percent == 80
+
+    def test_custom_cpu_budget_is_preserved(self, tmp_path):
+        path = tmp_path / "custom.json"
+        path.write_text(json.dumps({
+            "performance": {"max_cpu_usage_percent": 65},
+        }), encoding="utf-8")
+
+        c = ConfigManager(config_file=str(path))
+
+        assert c.get_performance_config().max_cpu_usage_percent == 65
 
     def test_saved_file_is_valid_json(self, cfg):
         cfg.set("test", "k", 123)

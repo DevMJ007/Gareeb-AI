@@ -17,11 +17,10 @@ from core.app_paths import data_path
 class AudioConfig:
     """Audio configuration settings."""
     # Voice input
-    push_to_talk_enabled: bool = True
-    push_to_talk_key: str = "ctrl+shift+m"
+    mic_toggle_on: bool = False
     auto_start_listening: bool = False
     wake_word_enabled: bool = False
-    wake_word: str = "hey mj"
+    wake_word: str = "hey gareeb"
     language: str = "en"
     
     # Voice output
@@ -77,7 +76,7 @@ class UIConfig:
     show_thinking_indicator: bool = True
     
     # Companion appearance
-    companion_name: str = "MJ"
+    companion_name: str = "Gareeb"
     companion_personality: str = "friendly"
     companion_color: str = "#333333"
     
@@ -133,7 +132,7 @@ class PerformanceConfig:
     """Performance and resource management."""
     # Resource limits
     max_memory_usage_mb: int = 2048
-    max_cpu_usage_percent: int = 50
+    max_cpu_usage_percent: int = 80
     max_concurrent_tasks: int = 3
     
     # Monitoring
@@ -184,6 +183,38 @@ class ConfigManager:
             if self.config_file.exists():
                 with open(self.config_file, 'r') as f:
                     self.config = json.load(f)
+
+                # Migrate only the product's previous default identity. Keep
+                # any name the user has already customized.
+                migrated = False
+                ui_config = self.config.get("ui", {})
+                if (isinstance(ui_config, dict)
+                        and ui_config.get("companion_name") == "MJ"):
+                    ui_config["companion_name"] = "Gareeb"
+                    migrated = True
+                audio_config = self.config.get("audio", {})
+                if (isinstance(audio_config, dict)
+                        and str(audio_config.get("wake_word", "")).strip().lower()
+                        == "hey mj"):
+                    audio_config["wake_word"] = "hey gareeb"
+                    migrated = True
+                if isinstance(audio_config, dict):
+                    for legacy_key in ("push_to_talk_enabled", "push_to_talk_key"):
+                        if legacy_key in audio_config:
+                            del audio_config[legacy_key]
+                            migrated = True
+                performance_config = self.config.get("performance", {})
+                if (isinstance(performance_config, dict)
+                        and performance_config.get("max_cpu_usage_percent") == 50):
+                    performance_config["max_cpu_usage_percent"] = 80
+                    migrated = True
+                if migrated:
+                    try:
+                        self.save()
+                    except Exception as exc:
+                        self.logger.warning(
+                            "Could not persist the assistant-name migration: %s", exc
+                        )
                 
                 self.logger.info(f"Configuration loaded from {self.config_file}")
             else:
@@ -198,11 +229,9 @@ class ConfigManager:
         """Save default configuration."""
         default_config = {
             "audio": {
-                "push_to_talk_enabled": True,
-                "push_to_talk_key": "ctrl+shift+m",
                 "auto_start_listening": False,
                 "wake_word_enabled": False,
-                "wake_word": "hey mj",
+                "wake_word": "hey gareeb",
                 "language": "en",
                 "tts_enabled": True,
                 "tts_speed": 1.0,
@@ -240,7 +269,7 @@ class ConfigManager:
                 "eye_movement_sensitivity": 1.0,
                 "show_listening_indicator": True,
                 "show_thinking_indicator": True,
-                "companion_name": "MJ",
+                "companion_name": "Gareeb",
                 "companion_personality": "friendly",
                 "companion_color": "#333333",
                 "conversation_panel_visible": True,
@@ -275,7 +304,7 @@ class ConfigManager:
             },
             "performance": {
                 "max_memory_usage_mb": 2048,
-                "max_cpu_usage_percent": 50,
+                "max_cpu_usage_percent": 80,
                 "max_concurrent_tasks": 3,
                 "monitor_cpu_usage": True,
                 "monitor_memory_usage": True,

@@ -97,7 +97,7 @@ class MJAIApp:
             handlers=handlers,
             force=True,
         )
-        self.logger.info("MJ AI starting up")
+        self.logger.info("Gareeb AI starting up")
 
     def _setup_directories(self) -> None:
         for name in ("logs", "models", "config", "data", "screenshots"):
@@ -239,8 +239,8 @@ class MJAIApp:
 
             # Welcome message.
             self.main_window.conversation.append_status(
-                "MJ AI is ready. Click the floating face to open chat. Hold "
-                "the mic button (or press Ctrl+Shift+M) to talk, or type below."
+                "Gareeb is ready. Click the floating face to open chat. Click "
+                "the mic to start listening, then click again to send, or type below."
             )
 
             self._first_run_permission_prompt()
@@ -272,16 +272,16 @@ class MJAIApp:
             mic = QMessageBox.question(
                 self.main_window,
                 "Microphone permission",
-                "Allow MJ AI to use your microphone for voice commands?\n\n"
-                "The mic only records while you hold the mic button or press "
-                "Ctrl+Shift+M - it never records in the background.",
+                "Allow Gareeb to use your microphone for voice commands?\n\n"
+                "The mic records only after you click it or press Ctrl+Shift+M. "
+                "Toggle it again to stop and send; it never records in the background.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             ) == QMessageBox.Yes
 
             screen = QMessageBox.question(
                 self.main_window,
                 "Screen capture permission",
-                "Allow MJ AI to capture and read your screen when you ask it to?\n\n"
+                "Allow Gareeb to capture and read your screen when you ask it to?\n\n"
                 "Screenshots are only taken on your request and never "
                 "continuously.",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
@@ -318,10 +318,10 @@ class MJAIApp:
             self.ai_service.start()
         if self.automation_service is not None:
             self.automation_service.start()
-        self.logger.info("MJ AI is ready")
+        self.logger.info("Gareeb AI is ready")
 
     def shutdown(self) -> None:
-        self.logger.info("Shutting down MJ AI…")
+        self.logger.info("Shutting down Gareeb AI…")
         try:
             if self.audio_service is not None:
                 self.audio_service.cleanup()
@@ -337,7 +337,7 @@ class MJAIApp:
                 self.memory_store.close()
             if self.config_manager is not None:
                 self.config_manager.save()
-            self.logger.info("MJ AI shutdown complete")
+            self.logger.info("Gareeb AI shutdown complete")
         except Exception as exc:
             self.logger.error(f"Shutdown error: {exc}")
             traceback.print_exc()
@@ -377,7 +377,7 @@ class MJAIApp:
 def main() -> int:
     application = MJAIApp()
 
-    application.app.setApplicationName("MJ AI")
+    application.app.setApplicationName("Gareeb AI")
     application.app.setApplicationVersion("1.0.0")
     application.app.setOrganizationName("Gareeb AI")
     application.app.setQuitOnLastWindowClosed(False)

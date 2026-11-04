@@ -27,9 +27,10 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from core.permissions import PermissionManager, PermissionError_
 from core.task_planner import TaskPlanner, TaskPlannerError, KNOWN_ACTIONS
+from core.resource_monitor import cpu_thread_limit
 
 
-SYSTEM_PROMPT = """You are MJ, a friendly desktop assistant running locally on the user's computer.
+SYSTEM_PROMPT = """You are Gareeb, a friendly desktop assistant running locally on the user's computer.
 
 Rules:
 - Answer clearly and briefly in plain language.
@@ -50,13 +51,13 @@ Rules:
 
 TOOL_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 SIMPLE_OPEN_COMMAND_RE = re.compile(
-    r"^\s*(?:(?:hey|hi)\s+mj[,:]?\s*)?(?:please\s+)?"
+    r"^\s*(?:(?:hey|hi)\s+(?:gareeb|mj)[,:]?\s*)?(?:please\s+)?"
     r"(?:(?:can|could)\s+you\s+)?(?:open|launch|start|run)\s+"
     r"(?:the\s+)?(?P<app>.+?)\s*(?:for\s+me)?[.!?]*\s*$",
     re.IGNORECASE,
 )
 FIREFOX_SEARCH_COMMAND_RE = re.compile(
-    r"^\s*(?:(?:hey|hi)\s+mj[,:]?\s*)?(?:please\s+)?"
+    r"^\s*(?:(?:hey|hi)\s+(?:gareeb|mj)[,:]?\s*)?(?:please\s+)?"
     r"(?:open|launch|start)\s+(?:the\s+)?(?:mozilla\s+)?firefox"
     r"(?:\s+browser)?\s+(?:and|then)\s+(?:then\s+)?"
     r"(?:search(?:\s+the\s+web)?(?:\s+for)?|look\s+up)\s+"
@@ -204,6 +205,14 @@ class AIService:
     def model_name(self) -> str:
         return self.ai_config.model_name
 
+    def _cpu_thread_limit(self) -> int:
+        try:
+            performance = self.config_manager.get_performance_config()
+            budget = performance.max_cpu_usage_percent
+        except Exception:
+            budget = 80
+        return cpu_thread_limit(budget)
+
     def check_model_available(self) -> bool:
         """Check whether the configured model exists locally."""
         if ollama_client is None:
@@ -253,13 +262,13 @@ class AIService:
 
         except Exception as exc:
             # A connection failure leaves model availability unknown. This
-            # lets MJ retry cleanly after the user starts Ollama.
+            # lets Gareeb retry cleanly after the user starts Ollama.
             self.model_available = None
             self.logger.error(f"Could not reach Ollama: {exc}")
             self._emit("model_error", {
                 "error": f"Cannot reach the Ollama server: {exc}",
                 "hint": (
-                    f"Open Ollama or run 'ollama serve'. MJ AI is configured "
+                    f"Open Ollama or run 'ollama serve'. Gareeb AI is configured "
                     f"for {self.ai_config.ollama_url}."
                 ),
             })
@@ -437,7 +446,7 @@ class AIService:
         self._emit("thinking_finished", {})
 
         # If the model asked for tools, run the task planner after the
-        # task finishes so MJ never claims that a failed action succeeded.
+        # task finishes so Gareeb never claims that a failed action succeeded.
         if tool_call:
             reply, reply_is_error = self._run_tool_task(tool_call, reply)
         else:
@@ -489,7 +498,7 @@ class AIService:
         if self.ollama is None:
             raise OllamaUnavailable(
                 "Ollama's Python client is missing. Install project requirements "
-                "and restart MJ AI."
+                "and restart Gareeb AI."
             )
 
         if self.model_available is not True:
@@ -533,7 +542,7 @@ class AIService:
             if not self.resource_monitor.can_load_model(estimated_mb):
                 required_mb = estimated_mb + 512
                 raise InsufficientResources(
-                    f"MJ needs about {required_mb} MB of free system resources "
+                    f"Gareeb needs about {required_mb} MB of free system resources "
                     f"to load {self.model_name}. Close memory-heavy apps and "
                     "try again."
                 )
@@ -553,6 +562,7 @@ class AIService:
                     "top_p": self.ai_config.top_p,
                     "top_k": self.ai_config.top_k,
                     "num_ctx": self.ai_config.max_context_length,
+                    "num_thread": self._cpu_thread_limit(),
                 },
             )
             for chunk in stream:

@@ -8,8 +8,8 @@ MJ AI is a lightweight, privacy-first desktop assistant that allows natural conv
 
 ## Features
 
-- **Animated Companion**: Expressive eyes with natural blinking and emotional states
-- **Voice Interaction**: Push-to-talk mode with speech-to-text and text-to-speech
+- **Animated Companion**: Hand-drawn horned imp with bat wings, crossed swords, and expressive states
+- **Voice Interaction**: Click-to-toggle microphone with speech-to-text and text-to-speech
 - **Local AI**: Ollama integration for running small language models locally
 - **Desktop Automation**: Open applications, manage windows, type and click
 - **Screen Understanding**: OCR-based text extraction and summarization
@@ -33,7 +33,7 @@ MJ AI is a lightweight, privacy-first desktop assistant that allows natural conv
 1. Install Python 3.10 or newer.
 2. Install [Ollama](https://ollama.ai/) to run a local AI model.
 3. For screen text extraction, install the Tesseract OCR application. MJ AI detects it on `PATH` and in common Windows installation folders.
-4. Connect a microphone for voice input. Voice input uses push-to-talk and stays disabled until permission is granted.
+4. Connect a microphone for voice input. Click the microphone to start listening and click it again to submit; voice input stays disabled until permission is granted.
 
 ### Installing MJ AI
 ```bash
@@ -67,7 +67,7 @@ Set-Location -LiteralPath 'D:\OneDrive\Desktop\Gareeb AI'
 
 1. **Launch**: Run `python run_mj_ai.py` from the project folder, or use the PowerShell command above. MJ AI starts as a small floating companion.
 2. **Open chat**: Click the face to open the assistant panel. Drag the companion to move it. Use **Ctrl+Shift+H** or the system tray to show or hide it.
-3. **Voice Commands**: Hold the microphone button and speak
+3. **Voice Commands**: Click the microphone button, speak, then click it again to submit. **Ctrl+Shift+M** toggles listening from the keyboard.
 4. **Examples**:
    - "Open Chrome"
    - "Explain what's on my screen"
@@ -78,7 +78,7 @@ Set-Location -LiteralPath 'D:\OneDrive\Desktop\Gareeb AI'
 
 - In **Settings → Voice**, choose the language you will speak. English is the
   default; Auto-detect is available when you regularly switch languages.
-- Hold the microphone while speaking, then release it to submit the recording.
+- Click the microphone once to start recording, then click again to stop and submit.
   Very short recordings are rejected with a message instead of being sent as
   likely misheard commands.
 - If MJ transcribes your words but does not answer, start Ollama from the
@@ -101,6 +101,10 @@ Open the settings panel (Ctrl+, or from the system tray) to configure:
 - Animation preferences
 - Memory retention
 - Startup behavior
+
+Local model inference and speech recognition use up to 80% of the configured CPU
+thread budget by default (up from 50%) to improve response times. Existing
+default configurations are migrated automatically; custom CPU budgets are kept.
 
 Configuration, logs, screenshots, and conversation memory are stored under
 `%LOCALAPPDATA%\Gareeb AI` on Windows, independent of the folder used to launch

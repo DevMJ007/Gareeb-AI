@@ -14,8 +14,10 @@ import time
 import queue
 import logging
 import threading
+import re
 from typing import Callable, Optional, Dict, Any
 from dataclasses import dataclass, field
+from core.resource_monitor import cpu_thread_limit
 
 try:
     import pyttsx3
@@ -49,11 +51,10 @@ class AudioState:
     is_listening: bool = False
     is_processing: bool = False
     is_speaking: bool = False
-    push_to_talk_active: bool = False
-    push_to_talk_enabled: bool = True
+    mic_toggle_on: bool = False
     auto_start_listening: bool = False
     wake_word_enabled: bool = False
-    wake_word: str = "hey mj"
+    wake_word: str = "hey gareeb"
     recognition_language: str = "en"
     wake_word_detected: bool = False
     microphone_allowed: bool = False
@@ -72,8 +73,9 @@ class AudioService:
     """
     Audio input/output for MJ AI.
 
-    Recording only happens between begin_listening() and end_listening()
-    (push-to-talk), so nothing is ever captured silently.
+    Recording only happens after the microphone is toggled on with begin_listening().
+    Toggling it off submits the captured audio for transcription.
+    Nothing is ever captured silently.
     """
 
     SAMPLE_RATE = 16000
@@ -123,7 +125,7 @@ class AudioService:
             return
         try:
             cfg = self.config_manager.get_audio_config()
-            self.state.push_to_talk_enabled = cfg.push_to_talk_enabled
+            self.state.mic_toggle_on = False
             self.state.auto_start_listening = cfg.auto_start_listening
             self.state.wake_word_enabled = cfg.wake_word_enabled
             self.state.wake_word = cfg.wake_word
@@ -174,10 +176,11 @@ class AudioService:
                 "text input still available."
             )
 
-        # Detect TTS engine.
-        self.state.tts_available = self._init_tts()
-
-        # Start TTS worker.
+        # pyttsx3/Windows SAPI owns COM state. Create and use its engine on
+        # the same dedicated thread so Qt's UI thread never initializes COM
+        # or blocks while speech is synthesized.
+        self._cancel_event.clear()
+        self.state.tts_available = False
         self._tts_thread = threading.Thread(target=self._tts_loop, daemon=True,
                                             name="mj-tts")
         self._tts_thread.start()
@@ -194,12 +197,14 @@ class AudioService:
         self.end_listening()
         self._close_capture()
         self._stop_tts()
+        if (self._tts_thread is not None
+                and self._tts_thread is not threading.current_thread()):
+            self._tts_thread.join(timeout=1.5)
         self._emit("voice_state", self._state_dict())
 
     def cleanup(self) -> None:
         self.stop()
         self._whisper = None
-        self._tts_engine = None
 
     # ------------------------------------------------------------------
     # State helpers
@@ -211,7 +216,7 @@ class AudioService:
             "is_speaking": s.is_speaking,
             "is_processing": s.is_processing,
             "mic_active": s.mic_active,
-            "push_to_talk_active": s.push_to_talk_active,
+            "mic_toggle_on": s.mic_toggle_on,  # NEW: Toggle state
             "asr_available": s.asr_available,
             "tts_available": s.tts_available,
             "audio_input_available": s.audio_input_available,
@@ -223,7 +228,7 @@ class AudioService:
         return self.state
 
     # ------------------------------------------------------------------
-    # Capture (push-to-talk)
+    # Toggle-to-listen capture
     # ------------------------------------------------------------------
     def _init_capture(self) -> bool:
         if not _PYAUDIO_AVAILABLE:
@@ -264,9 +269,10 @@ class AudioService:
 
     def begin_listening(self) -> bool:
         """
-        Start capturing audio (push-to-talk press).
+        Start capturing audio (microphone toggle ON).
 
         Returns True when recording actually started.
+        Clicking the microphone again calls end_listening() and submits the audio.
         """
         if self.state.is_listening:
             return True
@@ -302,7 +308,7 @@ class AudioService:
 
         self.state.is_listening = True
         self.state.mic_active = True
-        self.state.push_to_talk_active = True
+        self.state.mic_toggle_on = True  # NEW: Set toggle state
 
         # Capture pump thread.
         threading.Thread(target=self._capture_loop, daemon=True,
@@ -325,7 +331,8 @@ class AudioService:
 
     def end_listening(self) -> None:
         """
-        Stop capturing audio (push-to-talk release) and transcribe.
+        Stop capturing audio (microphone toggle OFF) and transcribe.
+        Toggling the microphone off submits the recorded audio for transcription.
         """
         if not self.state.is_listening:
             return
@@ -339,7 +346,7 @@ class AudioService:
 
         self.state.is_listening = False
         self.state.mic_active = False
-        self.state.push_to_talk_active = False
+        self.state.mic_toggle_on = False
 
         self._emit("listening_stopped", self._state_dict())
 
@@ -368,6 +375,7 @@ class AudioService:
         self._stop_stream()
         self.state.is_listening = False
         self.state.mic_active = False
+        self.state.mic_toggle_on = False
         self._stop_tts()
         self._emit("operation_cancelled", {"timestamp": time.time()})
 
@@ -381,8 +389,18 @@ class AudioService:
         if not _FASTER_WHISPER_AVAILABLE:
             raise VoiceError("faster-whisper is not installed.")
         self._emit("model_loading", {"model": "whisper-base"})
-        # 'base' ≈ 150 MB RAM - suitable for the 12 GB target.
-        self._whisper = WhisperModel("base", device="cpu", compute_type="int8")
+        # Share the configured CPU budget with local language model inference.
+        try:
+            performance = self.config_manager.get_performance_config()
+            budget = performance.max_cpu_usage_percent
+        except Exception:
+            budget = 80
+        cpu_threads = cpu_thread_limit(budget)
+        # 'base' ≈ 150 MB RAM; cap threads so transcription does not occupy
+        # every logical CPU on compact machines.
+        self._whisper = WhisperModel(
+            "base", device="cpu", compute_type="int8", cpu_threads=cpu_threads
+        )
         return self._whisper
 
     def _frames_to_audio(self, frames: list):
@@ -473,9 +491,37 @@ class AudioService:
             return False
 
     def _tts_loop(self) -> None:
+        try:
+            self.state.tts_available = bool(self._init_tts())
+        except Exception as exc:
+            self.logger.warning("TTS worker initialization failed: %s", exc)
+            self._tts_engine = None
+        engine = self._tts_engine if self.state.tts_available else None
+        self._emit("voice_state", self._state_dict())
+        if engine is None:
+            return
+
+        def on_word(name, location, length):
+            del name
+            word = ""
+            try:
+                word = self._active_tts_text[int(location):int(location) + int(length)]
+            except (AttributeError, TypeError, ValueError):
+                pass
+            syllables = max(1, len(re.findall(r"[aeiouy]+", word.lower())))
+            level = min(0.9, 0.24 + syllables * 0.13)
+            if len(word) > 8:
+                level = min(0.95, level + 0.08)
+            self._emit("speech_progress", {"level": level, "word": word})
+
+        try:
+            engine.connect("started-word", on_word)
+        except Exception as exc:
+            self.logger.debug("TTS word-boundary events unavailable: %s", exc)
+
         while self._running:
             try:
-                text = self._tts_queue.get(timeout=0.2)
+                text = self._tts_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
@@ -483,20 +529,38 @@ class AudioService:
                 continue
 
             self.state.is_speaking = True
+            self._active_tts_text = text
             self._emit("speech_started", {"text": text})
             try:
-                if self._tts_engine is not None:
-                    self._tts_engine.say(text)
-                    self._tts_engine.runAndWait()
+                # Settings are applied on the engine's owner thread.
+                engine.setProperty("rate", int(180 * self.state.tts_speed))
+                engine.setProperty("volume", max(0.0, min(1.0, self.state.tts_volume)))
+                engine.say(text)
+                engine.startLoop(False)
+                while engine.isBusy():
+                    if self._cancel_event.is_set() or not self._running:
+                        engine.stop()
+                        break
+                    engine.iterate()
+                    time.sleep(0.01)
+                engine.endLoop()
             except Exception as exc:
                 self.logger.warning(f"TTS playback failed: {exc}")
             finally:
                 self.state.is_speaking = False
+                self._emit("speech_progress", {"level": 0.0})
                 self._emit("speech_finished", {})
+                self._active_tts_text = ""
+
+        try:
+            engine.stop()
+        except Exception:
+            pass
+        self._tts_engine = None
 
     def speak(self, text: str) -> bool:
         """Queue text for spoken output."""
-        if not self.state.tts_enabled or not self.state.tts_available:
+        if not self.state.tts_enabled or not self._running:
             return False
         clean = (text or "").strip()
         if not clean:
@@ -512,11 +576,6 @@ class AudioService:
                 self._tts_queue.get_nowait()
         except queue.Empty:
             pass
-        if self._tts_engine is not None:
-            try:
-                self._tts_engine.stop()
-            except Exception:
-                pass
         self.state.is_speaking = False
 
     def _stop_tts(self) -> None:
@@ -541,23 +600,10 @@ class AudioService:
         )
 
     def update_volume(self, volume: float) -> None:
-        self.state.tts_speed = max(0.0, min(1.0, volume))
-        if self._tts_engine is not None:
-            try:
-                self._tts_engine.setProperty("volume", self.state.tts_volume)
-            except Exception:
-                pass
+        self.state.tts_volume = max(0.0, min(1.0, float(volume)))
 
     def update_tts_speed(self, speed: float) -> None:
         self.state.tts_speed = max(0.5, min(3.0, speed))
-        if self._tts_engine is not None:
-            try:
-                self._tts_engine.setProperty("rate", int(180 * self.state.tts_speed))
-            except Exception:
-                pass
-
-    def set_push_to_talk_enabled(self, enabled: bool) -> None:
-        self.state.push_to_talk_enabled = bool(enabled)
 
     # ------------------------------------------------------------------
     # Text input fallback
